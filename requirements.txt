@@ -1,0 +1,10 @@
+langchain
+langchain-community
+langchain-groq
+langgraph
+faiss-cpu
+sentence-transformers
+ragas
+trulens-eval
+zenml
+python-dotenv

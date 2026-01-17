@@ -1,7 +1,7 @@
 from zenml import step
-from evaluation.metrics import compute_metrics
+from evaluation.ragas_eval import evaluate_rag
 
 @step
 def evaluate_agent(results: list):
-    return compute_metrics(results)
-    
+    scores = evaluate_rag(results)
+    return scores    

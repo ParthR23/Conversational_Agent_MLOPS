@@ -1,44 +1,59 @@
+# mlops/steps/run_conversations.py
 from zenml import step
 from langchain_community.vectorstores import FAISS
-from langchain_community.embeddings import HuggingFaceEmbeddings
-from agents.steering_agent import SteeringAgent
-from agents.knowledge_agent import KnowledgeAgent
-from evaluation.conversations import conversations
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_groq import ChatGroq
+from langchain_core.prompts import PromptTemplate
+from langchain_core.runnables import RunnablePassthrough
+import os
+os.environ["GROQ_API_KEY"] = "" 
+
 
 @step
-def run_conversations(index_path: str):
-    embeddings = HuggingFaceEmbeddings()
+def run_conversations(
+    queries: list[dict],
+    index_path: str
+) -> None:
+
+    embeddings = HuggingFaceEmbeddings(
+        model_name="sentence-transformers/all-MiniLM-L6-v2"
+    )
+
     vectorstore = FAISS.load_local(
         index_path,
         embeddings,
         allow_dangerous_deserialization=True
     )
-    retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
 
-    steering = SteeringAgent()
-    knowledge = KnowledgeAgent(retriever)
+    retriever = vectorstore.as_retriever()
 
-    results = []
+    llm = ChatGroq(
+    model="llama-3.3-70b-versatile",
+    temperature=0
+    )
 
-    # Ensure conversations() returns list of dicts
-    for turn in conversations():  
-        # If using dicts
-        user_input = turn["user"]
-        expected_route = turn["expected_route"]
 
-        route = steering.route(user_input)
+    prompt = PromptTemplate.from_template(
+        """Use the context to answer the question.
 
-        if route == "knowledge":
-            response = knowledge.answer(user_input)
-        else:
-            response = "Handled by other skill"
+        Context:
+        {context}
 
-        results.append({
-            "query": user_input,
-            "predicted_route": route,
-            "response": response,
-            "expected_route": expected_route
-        })
+        Question:
+        {question}
+        """
+    )
 
-    return results
+    rag_chain = (
+        {
+            "context": retriever,
+            "question": RunnablePassthrough()
+        }
+        | prompt
+        | llm
+    )
 
+    for turn in queries:
+        response = rag_chain.invoke(turn["user"])
+        print("USER:", turn["user"])
+        print("BOT:", response.content)
